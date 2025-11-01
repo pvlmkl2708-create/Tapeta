@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tvoř si tapetu — stáhni jako PNG 🚗📱</title>
+  <style>
+    :root {
+      --bg:#0f1720;
+      --card:#0b1220;
+      --accent:#ff6b6b;
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      background:var(--bg);
+      color:#eef2f7;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:18px;
+      padding:22px;
+    }
+    header{ text-align:center }
+    h1{ margin:0 0 6px 0; font-size:20px }
+    .controls{
+      width:100%;
+      max-width:980px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.02));
+      border-radius:var(--radius);
+      padding:12px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    label{
+      font-size:13px; color:#cbd5e1;
+    }
+    select, input[type="color"], button{
+      padding:8px 10px;
+      border-radius:8px;
+      border: none;
+      background:#0b1630;
+      color:#fff;
+      font-size:14px;
+    }
+    #wallpaperPreviewWrap{
+      width:100%;
+      max-width:980px;
+      background:var(--card);
+      border-radius:var(--radius);
+      padding:14px;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+    }
+    #preview {
+      width:360px; /* preview size: phone-like */
+      height:780px;
+      border-radius:12px;
+      overflow:hidden;
+      background-size:cover;
+      background-position:center;
+      position:relative;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+    #preview img#previewCar {
+      position:absolute;
+      bottom:26px;
+      left:50%;
+      transform:translateX(-50%);
+      width:68%;
+      max-width:720px;
+      transition:transform .3s ease;
+      pointer-events:none;
+      -webkit-user-drag: none;
+    }
+    .small{ font-size:12px; color:#a6b3c6 }
+    footer{ color:#98a6bd; font-size:12px; margin-top:6px }
+    .spacer{ flex:1 }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚗 Tvoř si vlastní tapetu — stáhni PNG</h1>
+    <div class="small">Vyber auto, pozadí, barvu auta a rozlišení. Klikni „Vytvořit a stáhnout“.</div>
+  </header>
+
+  <div class="controls" role="region" aria-label="Ovládání tapety">
+    <label>
+      Auto:
+      <select id="carSelect" aria-label="Vyber auto">
+        <option value="sport">Sportovní (Subaru-like)</option>
+        <option value="nissan">Nissan-like</option>
+        <option value="subaru">Subaru-like (jiný model)</option>
+        <option value="truck">Náklaďák</option>
+      </select>
+    </label>
+
+    <label>
+      Pozadí:
+      <select id="bgSelect" aria-label="Vyber pozadí">
+        <option value="city">Město (noční)</option>
+        <option value="beach">Pláž</option>
+        <option value="mountains">Hory</option>
+        <option value="eiffel">Eiffel / město (landmark)</option>
+      </select>
+    </label>
+
+    <label>
+      Barva auta:
+      <input type="color" id="tintColor" value="#ff3b3b" aria-label="Vyber barvu auta">
+    </label>
+
+    <label>
+      Rozlišení:
+      <select id="resolutionSelect" aria-label="Rozlišení tapety">
+        <option value="1080x1920">1080 × 1920 (standard)</option>
+        <option value="1170x2532">1170 × 2532 (iPhone)</option>
+        <option value="1242x2688">1242 × 2688</option>
+        <option value="720x1280">720 × 1280 (menší)</option>
+      </select>
+    </label>
+
+    <div class="spacer"></div>
+
+    <button id="downloadBtn">Vytvořit a stáhnout PNG</button>
+  </div>
+
+  <div id="wallpaperPreviewWrap">
+    <div id="preview" aria-label="Náhled tapety">
+      <img id="previewCar" src="" alt="auto náhled" draggable="false">
+    </div>
+  </div>
+
+  <footer>© 2025 — Stáhni a ulož do mobilu. Pokud se PNG neuloží, možný CORS problém s obrázky — dej vědět a nahrajeme zdroje jinde.</footer>
+
+  <!-- skrytý canvas pro zpracování (nebude viditelný) -->
+  <canvas id="exportCanvas" style="display:none;"></canvas>
+
+  <script>
+    // --- zdroje obrázků (CDN s CORS) ---
+    const backgrounds = {
+      city: "https://cdn.pixabay.com/photo/2016/11/29/05/08/city-1868007_1280.jpg",
+      beach: "https://cdn.pixabay.com/photo/2016/11/29/09/32/mountains-1866531_1280.jpg", // hezká pláž/mountains mix - můžete vyměnit
+      mountains: "https://cdn.pixabay.com/photo/2015/03/26/09/41/beach-690034_1280.jpg",
+      eiffel: "https://cdn.pixabay.com/photo/2016/03/27/22/16/paris-1284543_1280.jpg"
+    };
+
+    // karikatury aut (transparentní PNG) - snažil jsem se volit obrázky s průhledným pozadím
+    const cars = {
+      sport: "https://cdn.pixabay.com/photo/2016/03/27/22/16/sports-car-1284544_1280.png",
+      nissan: "https://cdn.pixabay.com/photo/2017/03/27/13/16/vintage-car-2176947_1280.png",
+      subaru: "https://cdn.pixabay.com/photo/2013/07/13/12/49/car-160803_1280.png",
+      truck: "https://cdn.pixabay.com/photo/2013/07/13/12/49/truck-160803_1280.png"
+    };
+
+    // DOM
+    const carSelect = document.getElementById('carSelect');
+    const bgSelect = document.getElementById('bgSelect');
+    const tintColor = document.getElementById('tintColor');
+    const preview = document.getElementById('preview');
+    const previewCar = document.getElementById('previewCar');
+    const resolutionSelect = document.getElementById('resolutionSelect');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const exportCanvas = document.getElementById('exportCanvas');
+
+    // nastaví náhledy při změně
+    function updatePreview() {
+      const bg = backgrounds[bgSelect.value];
+      const car = cars[carSelect.value];
+      preview.style.backgroundImage = `url(${bg})`;
+      previewCar.src = car;
+      previewCar.style.filter = ''; // barvu v náhledu řešíme CSS (neaplikujeme tint zde, protože chceme čistý PNG proces)
+      // aplikovat vizuální tint v preview pomocí CSS mix-blend (jen pro náhled)
+      previewCar.style.mixBlendMode = 'multiply';
+      previewCar.style.filter = `drop-shadow(0 10px 30px rgba(0,0,0,0.6))`;
+      // vytvoření vrstvy barvy v náhledu:
+      // (pro jednoduchost použijeme pseudo-tint: překryjeme přechod v náhledu)
+      // — necháme to jednoduché, hlavní tint se udělá v exportu
+    }
+
+    // funkce načte obrázek s crossOrigin pro canvas
+    function loadImage(url) {
+      return new Promise((res, rej) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => res(img);
+        img.onerror = (e) => rej(new Error('Image load error: ' + url));
+        img.src = url;
+      });
+    }
+
+    // generování canvasu a stažení PNG
+    async function generateAndDownload() {
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = 'Vytvářím…';
+
+      try {
+        const [wStr, hStr] = resolutionSelect.value.split('x');
+        const W = parseInt(wStr, 10);
+        const H = parseInt(hStr, 10);
+        exportCanvas.width = W;
+        exportCanvas.height = H;
+        const ctx = exportCanvas.getContext('2d');
+
+        // Načti obrázky
+        const bgUrl = backgrounds[bgSelect.value];
+        const carUrl = cars[carSelect.value];
+
+        const [bgImg, carImg] = await Promise.all([loadImage(bgUrl), loadImage(carUrl)]);
+        // kreslíme pozadí
+        // vyplníme celý canvas pozadím (cover behavior)
+        // vypočteme ratio pro 'cover'
+        function drawImageCover(context, img, cw, ch) {
+          const cr = img.width / img.height;
+          const wr = cw / ch;
+          let dw, dh, dx, dy;
+          if (cr > wr) {
+            // obrázek je širší -> scale podle výšky
+            dh = ch;
+            dw = img.width * (ch / img.height);
+            dx = (cw - dw) / 2;
+            dy = 0;
+          } else {
+            // obrázek je užší -> scale podle šířky
+            dw = cw;
+            dh = img.height * (cw / img.width);
+            dx = 0;
+            dy = (ch - dh) / 2;
+          }
+          context.drawImage(img, dx, dy, dw, dh);
+        }
+
+        // Kreslí pozadí
+        drawImageCover(ctx, bgImg, W, H);
+
+        // ----- příprava car vrstvy (tint) -----
+        // vytvoříme temporální canvas stejné velikosti jako car obrázek, přepočítáme velikost vozu v rámci výsledného plátna
+        // chceme auto široké cca 68% šířky (stejně jako preview), a umístit ho nad spodní okraj
+        const carTargetWidth = Math.round(W * 0.68);
+        const carAspect = carImg.width / carImg.height;
+        const carTargetHeight = Math.round(carTargetWidth / carAspect);
+
+        // pozice auta: horizontálně střed, vertikálně bottom-offset
+        const carX = Math.round((W - carTargetWidth) / 2);
+        const carY = Math.round(H - carTargetHeight - Math.round(H * 0.03)); // malé odsazení od spodku
+
+        // Pokud chceme tintovat auto:
+        if (tintColor.value && tintColor.value !== '') {
+          // 1) nakreslíme auto do temp canvas
+          const tmp = document.createElement('canvas');
+          tmp.width = carTargetWidth;
+          tmp.height = carTargetHeight;
+          const tctx = tmp.getContext('2d');
+          // nakreslíme auto zde do plného boxu
+          tctx.drawImage(carImg, 0, 0, carTargetWidth, carTargetHeight);
+
+          // 2) vytvoříme masku a vyplníme barvou pomocí source-in (zachová průhlednost tvaru auta)
+          tctx.globalCompositeOperation = 'source-in';
+          tctx.fillStyle = tintColor.value;
+          tctx.fillRect(0, 0, tmp.width, tmp.height);
+
+          // 3) teď máme barevný tvar auta v tmp — chceme zachovat stíny/odlesky z původní textury.
+          // Abychom zachovali i původní detaily (odlesky), můžeme:
+          // - nakreslit původní carImg jako multiply / overlay nad barevným tvarem,
+          // ale jednoduché a často pěkné: vykreslíme originální car jako stín (v režimu destination-over),
+          // nebo použijeme mix s globalAlpha. Zkusíme následující postup:
+          // vytvoříme další tmp2, nakreslíme originál s nízkou alpha jako highlight přes barevný tvar.
+
+          // uložíme barevný výsledný do hlavního canvasu
+          ctx.drawImage(tmp, carX, carY, carTargetWidth, carTargetHeight);
+
+          // nyní nad to nakreslíme původní auto s nízkou průhledností, aby zůstaly detaily
+          ctx.globalAlpha = 0.6;
+          ctx.drawImage(carImg, carX, carY, carTargetWidth, carTargetHeight);
+          ctx.globalAlpha = 1.0;
+        } else {
+          // bez tintu - jen kreslíme auto přímo
+          ctx.drawImage(carImg, carX, carY, carTargetWidth, carTargetHeight);
+        }
+
+        // volitelně: přidat drop shadow pro auto (jednoduché)
+        // (tuto jednoduchou stínu nelze aplikovat zpětně snadno; přes complexity vynecháváme realtime shadow)
+
+        // připrav dataURL
+        const dataURL = exportCanvas.toDataURL('image/png');
+
+        // vytvořím odkaz a spustím stažení
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = `tapeta_${W}x${H}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        // krátká vizuální zpětná vazba
+        downloadBtn.textContent = 'Hotovo — stáhnuto!';
+        setTimeout(()=> downloadBtn.textContent = 'Vytvořit a stáhnout PNG', 1800);
+
+      } catch (err) {
+        console.error(err);
+        alert('Došlo k chybě při vytváření obrázku. Možná CORS problém s externími obrázky. Napiš mi a nahradíme zdroje nebo použijeme vlastní soubory.');
+        downloadBtn.textContent = 'Vytvořit a stáhnout PNG';
+      } finally {
+        downloadBtn.disabled = false;
+      }
+    }
+
+    // eventy
+    carSelect.addEventListener('change', updatePreview);
+    bgSelect.addEventListener('change', updatePreview);
+    tintColor.addEventListener('input', () => {
+      // jen vizuální update (preview)
+      previewCar.style.filter = `drop-shadow(0 14px 30px rgba(0,0,0,0.7))`;
+      // updatePreview zachová background a src
+    });
+    resolutionSelect.addEventListener('change', () => {/* nic zvláštního */});
+    downloadBtn.addEventListener('click', generateAndDownload);
+
+    // initial
+    updatePreview();
+  </script>
+</body>
+</html>
